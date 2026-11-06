@@ -27,6 +27,10 @@ function normalize(value: unknown): string {
   return String(value ?? "").trim().toUpperCase();
 }
 
+function preserveText(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
 function normalizeHeader(value: unknown): string {
   return normalize(value).replace(/[^A-Z0-9]/g, "");
 }
@@ -155,7 +159,7 @@ export async function POST(request: NextRequest) {
         getField(row, ["Customer Id", "Customer ID"])
       );
       const amount = parseAmount(getField(row, ["Amount"]));
-      const merchantReference = normalize(
+      const merchantReference = preserveText(
         getField(row, ["Merchant Reference"])
       );
 
@@ -201,7 +205,7 @@ export async function POST(request: NextRequest) {
         getField(row, ["Customer Id", "Customer ID"])
       );
       const centralAmount = parseAmount(getField(row, ["Amount"]));
-      const merchantReference = normalize(
+      const merchantReference = preserveText(
         getField(row, ["Merchant Reference"])
       );
       const rowOccurrences = occurrences.get(customerId) ?? 0;
@@ -234,7 +238,7 @@ export async function POST(request: NextRequest) {
       }
 
       const exactMatch = candidates.find((candidate) => {
-        const paidReference = normalize(
+        const paidReference = preserveText(
           getField(candidate, ["merchantReference", "Merchant Reference"])
         );
         const paidAmount = parseAmount(
@@ -273,7 +277,7 @@ export async function POST(request: NextRequest) {
         note = "Multiple Paid records found; review required";
       } else {
         const candidate = candidates[0];
-        const paidReference = normalize(
+        const paidReference = preserveText(
           getField(candidate, ["merchantReference", "Merchant Reference"])
         );
         const paidAmount = parseAmount(
