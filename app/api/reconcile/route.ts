@@ -15,6 +15,15 @@ type PaymentDifference = {
   matchNote: string;
 };
 
+type MatchedPayment = {
+  customerId: string;
+  centralAmount: number;
+  centralMerchantReference: string;
+  paidBillId: string;
+  paidAmount: number;
+  status: string;
+};
+
 function normalize(value: unknown): string {
   return String(value ?? "").trim().toUpperCase();
 }
@@ -103,6 +112,7 @@ export async function POST(request: NextRequest) {
     const paidRows = readExcel(paidBuffer);
 
     const uniqueCentralRows: ExcelRow[] = [];
+    const duplicateRows: ExcelRow[] = [];
     const seenCentralPayments = new Set<string>();
     let duplicateCount = 0;
 
@@ -111,12 +121,20 @@ export async function POST(request: NextRequest) {
         getField(row, ["Customer Id", "Customer ID"])
       );
       const amount = parseAmount(getField(row, ["Amount"]));
+      const merchantReference = normalize(
+        getField(row, ["Merchant Reference"])
+      );
 
       if (customerId && amount !== null) {
-        const paymentKey = JSON.stringify([customerId, amount]);
+        const paymentKey = JSON.stringify([
+          customerId,
+          amount,
+          merchantReference,
+        ]);
 
         if (seenCentralPayments.has(paymentKey)) {
           duplicateCount++;
+          duplicateRows.push(row);
           continue;
         }
 
@@ -158,6 +176,7 @@ export async function POST(request: NextRequest) {
     }
 
     let matchedCount = 0;
+    const matchedPayments: MatchedPayment[] = [];
     const differences: PaymentDifference[] = [];
 
     for (const centralRow of uniqueCentralRows) {
@@ -221,8 +240,24 @@ export async function POST(request: NextRequest) {
       });
 
       if (exactMatch) {
-        matchedCount++;
-        continue;
+        const paidAmount = parseAmount(
+          getField(exactMatch, ["Total Amount"])
+        );
+
+        if (paidAmount !== null) {
+          matchedCount++;
+          matchedPayments.push({
+            customerId,
+            centralAmount,
+            centralMerchantReference: merchantReference,
+            paidBillId: normalize(
+              getField(exactMatch, ["Bill Id", "Bill ID"])
+            ),
+            paidAmount,
+            status: normalize(getField(exactMatch, ["Status"])),
+          });
+          continue;
+        }
       }
 
       // Do not arbitrarily choose a record if several candidates exist.
@@ -296,7 +331,9 @@ export async function POST(request: NextRequest) {
       success: true,
       totalPayments: uniqueCentralRows.length,
       duplicateCount,
+      duplicateRows,
       matchedCount,
+      matchedPayments,
       differenceCount: differences.length,
       differences,
     });

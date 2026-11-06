@@ -14,11 +14,22 @@ interface PaymentDifference {
   matchNote: string;
 }
 
+interface MatchedPayment {
+  customerId: string;
+  centralAmount: number;
+  centralMerchantReference: string;
+  paidBillId: string;
+  paidAmount: number;
+  status: string;
+}
+
 interface ReconciliationResult {
   success: boolean;
   totalPayments: number;
   duplicateCount: number;
+  duplicateRows: Record<string, unknown>[];
   matchedCount: number;
+  matchedPayments: MatchedPayment[];
   differenceCount: number;
   differences: PaymentDifference[];
 }
@@ -29,6 +40,8 @@ export default function Home() {
 
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [downloadingDuplicates, setDownloadingDuplicates] = useState(false);
+  const [downloadingMatches, setDownloadingMatches] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
   const [error, setError] = useState("");
@@ -141,6 +154,102 @@ export default function Home() {
       );
     } finally {
       setDownloading(false);
+    }
+  }
+
+  async function handleDownloadDuplicates() {
+    if (!result || result.duplicateRows.length === 0) {
+      setError("There are no duplicate rows to download.");
+      return;
+    }
+
+    setDownloadingDuplicates(true);
+    setError("");
+
+    try {
+      const response = await fetch("/api/duplicate-report", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          duplicateRows: result.duplicateRows,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to generate duplicate report.");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "uni-cash-duplicate-rows.xlsx";
+
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Could not download the duplicate report."
+      );
+    } finally {
+      setDownloadingDuplicates(false);
+    }
+  }
+
+  async function handleDownloadMatches() {
+    if (!result || result.matchedPayments.length === 0) {
+      setError("There are no matched payments to download.");
+      return;
+    }
+
+    setDownloadingMatches(true);
+    setError("");
+
+    try {
+      const response = await fetch("/api/match-report", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          matchedPayments: result.matchedPayments,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to generate matched report.");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "uni-cash-matched-payments.xlsx";
+
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Could not download the matched payments report."
+      );
+    } finally {
+      setDownloadingMatches(false);
     }
   }
 
@@ -299,7 +408,14 @@ export default function Home() {
 
           <button
             onClick={handleCompare}
-            disabled={!centralFile || !paidFile || loading || downloading}
+            disabled={
+              !centralFile ||
+              !paidFile ||
+              loading ||
+              downloading ||
+              downloadingDuplicates ||
+              downloadingMatches
+            }
             className="rounded-xl bg-blue-700 px-10 py-4 font-semibold text-white shadow-lg shadow-blue-700/20 transition hover:-translate-y-0.5 hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:shadow-none"
           >
             {loading ? "Comparing Payments..." : "Compare Payments"}
@@ -345,6 +461,27 @@ export default function Home() {
                 <h3 className="text-3xl font-bold text-amber-600 mt-2">
                   {result.duplicateCount.toLocaleString()}
                 </h3>
+                <p className="mt-2 text-xs text-slate-500">
+                  Rows are excluded only when Customer ID, amount, and merchant
+                  reference match. Different references count as separate
+                  payments.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleDownloadDuplicates}
+                  disabled={
+                    result.duplicateRows.length === 0 ||
+                    downloadingDuplicates ||
+                    downloadingMatches ||
+                    downloading ||
+                    loading
+                  }
+                  className="mt-4 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+                >
+                  {downloadingDuplicates
+                    ? "Generating Report..."
+                    : "⬇ Download Duplicate Excel"}
+                </button>
               </div>
 
               {/* MATCHED */}
@@ -356,6 +493,22 @@ export default function Home() {
                 <h3 className="text-3xl font-bold text-green-600 mt-2">
                   {result.matchedCount.toLocaleString()}
                 </h3>
+                <button
+                  type="button"
+                  onClick={handleDownloadMatches}
+                  disabled={
+                    result.matchedPayments.length === 0 ||
+                    downloadingMatches ||
+                    downloadingDuplicates ||
+                    downloading ||
+                    loading
+                  }
+                  className="mt-4 rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                >
+                  {downloadingMatches
+                    ? "Generating Report..."
+                    : "⬇ Download Matched Excel"}
+                </button>
               </div>
 
               {/* DIFFERENCES */}
@@ -393,6 +546,8 @@ export default function Home() {
                   disabled={
                     result.differences.length === 0 ||
                     downloading ||
+                    downloadingDuplicates ||
+                    downloadingMatches ||
                     loading
                   }
                   className="bg-green-700 hover:bg-green-800 disabled:bg-slate-400 disabled:cursor-not-allowed text-white px-5 py-3 rounded-lg font-semibold transition"

@@ -15,19 +15,22 @@ export function getAuthConfiguration(): AuthConfiguration {
     process.env.UNICASH_USERNAME ?? (isProduction ? "" : "Unicash");
   const password =
     process.env.UNICASH_PASSWORD ?? (isProduction ? "" : "password");
-  const secret =
-    process.env.AUTH_SECRET ??
-    (isProduction ? "" : "unicash-local-development-secret-do-not-use-in-production");
 
-  if (!username || !password || !secret) {
+  if (!username || !password) {
     throw new Error(
-      "Set UNICASH_USERNAME, UNICASH_PASSWORD, and AUTH_SECRET in the server environment."
+      "Set UNICASH_USERNAME and UNICASH_PASSWORD in the server environment."
     );
   }
 
-  if (secret.length < 32) {
-    throw new Error("AUTH_SECRET must contain at least 32 characters.");
-  }
+  const secret = createHash("sha256")
+    .update(
+      JSON.stringify([
+        "central-payment-reconciliation-session",
+        username,
+        password,
+      ])
+    )
+    .digest("hex");
 
   return {
     username,
