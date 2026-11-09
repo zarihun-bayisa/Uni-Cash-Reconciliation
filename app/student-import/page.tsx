@@ -14,6 +14,20 @@ const OUTPUT_HEADERS = [
   "PHONE",
 ] as const;
 
+const EARLY_GRADE_OPTIONS = ["Nursery", "UKG", "KG-1", "KG-2", "KG-3"];
+const GRADE_OPTIONS = [
+  ...EARLY_GRADE_OPTIONS,
+  ...Array.from({ length: 12 }, (_, index) => String(index + 1)),
+];
+
+type GradeFilter =
+  | "all"
+  | "nursery-kg3"
+  | "grades-1-4"
+  | "grades-5-8"
+  | "grades-9-12"
+  | "specific";
+
 type Field =
   | "id"
   | "firstName"
@@ -229,7 +243,14 @@ function cellText(value: unknown): string {
 
 function normalizeGrade(value: string): string {
   const compact = value.toUpperCase().replace(/[^A-Z0-9]/g, "");
-  if (compact === "NURSERY" || compact === "NURSERY1") return "Nursery";
+  if (
+    compact === "NUR" ||
+    compact === "NURSERY" ||
+    compact === "NURSERY1"
+  ) {
+    return "Nursery";
+  }
+  if (compact === "UKG") return "UKG";
 
   const kgMatch = compact.match(/^KG0?([1-3])$/);
   if (kgMatch) return `KG-${kgMatch[1]}`;
@@ -245,13 +266,18 @@ function parseGradeAndSection(value: string): {
   section: string;
 } {
   const compact = value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const ukgMatch = compact.match(/^UKG([A-Z])?$/);
+  if (ukgMatch) return { grade: "UKG", section: ukgMatch[1] ?? "" };
+
   const kgMatch = compact.match(/^KG0?([1-3])([A-Z])?$/);
   if (kgMatch) return { grade: `KG-${kgMatch[1]}`, section: kgMatch[2] ?? "" };
 
-  const nurseryMatch = compact.match(/^NURSERY([A-Z])?$/);
+  const nurseryMatch = compact.match(/^(?:NURSERY|NUR)([A-Z])?$/);
   if (nurseryMatch) {
     return { grade: "Nursery", section: nurseryMatch[1] ?? "" };
   }
+
+  if (compact === "NURSERY1") return { grade: "Nursery", section: "" };
 
   const gradeMatch = compact.match(
     /^(?:GRADE|CLASS)?0?([1-9]|1[0-2])(?:ST|ND|RD|TH)?([A-Z])?$/
@@ -264,10 +290,46 @@ function parseGradeAndSection(value: string): {
 }
 
 function gradeFromSheetName(sheetName: string): string {
+  const earlyGradeMatch = sheetName.match(
+    /(?:^|[^A-Z0-9])(NURSERY1|NURSERY|NUR|UKG|KG\s*[-_]?\s*[1-3])(?=$|[^A-Z0-9])/i
+  );
+  if (earlyGradeMatch) return parseGradeAndSection(earlyGradeMatch[1]).grade;
+
   const match = sheetName.match(
     /(?:^|[^A-Z0-9])(?:GRADE|CLASS|G)\s*[-_ ]?\s*(0?[1-9]|1[0-2])(?:ST|ND|RD|TH)?(?=$|[^A-Z0-9])/i
   );
   return match ? normalizeGrade(match[1]) : "";
+}
+
+function sortStudentsByGrade(records: StudentRecord[]): StudentRecord[] {
+  return records
+    .map((record, index) => ({ record, index }))
+    .sort((left, right) => {
+      const leftRank = GRADE_OPTIONS.indexOf(left.record.grade);
+      const rightRank = GRADE_OPTIONS.indexOf(right.record.grade);
+      const normalizedLeftRank =
+        leftRank < 0 ? GRADE_OPTIONS.length : leftRank;
+      const normalizedRightRank =
+        rightRank < 0 ? GRADE_OPTIONS.length : rightRank;
+      return normalizedLeftRank - normalizedRightRank || left.index - right.index;
+    })
+    .map(({ record }) => record);
+}
+
+function gradeMatchesFilter(
+  grade: string,
+  filter: GradeFilter,
+  specificGrades: string[]
+): boolean {
+  if (filter === "all") return true;
+  if (filter === "specific") return specificGrades.includes(grade);
+  if (filter === "nursery-kg3") return EARLY_GRADE_OPTIONS.includes(grade);
+
+  const numericGrade = Number(grade);
+  if (!Number.isInteger(numericGrade)) return false;
+  if (filter === "grades-1-4") return numericGrade >= 1 && numericGrade <= 4;
+  if (filter === "grades-5-8") return numericGrade >= 5 && numericGrade <= 8;
+  return numericGrade >= 9 && numericGrade <= 12;
 }
 
 function normalizePhone(value: string): string {
@@ -448,9 +510,19 @@ export default function StudentImportPage() {
   const [sources, setSources] = useState<ImportedSheet[]>([]);
   const [showTextConverter, setShowTextConverter] = useState(false);
   const [smsText, setSmsText] = useState("");
+  const [gradeFilter, setGradeFilter] = useState<GradeFilter>("all");
+  const [specificGrades, setSpecificGrades] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [textError, setTextError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  function getFilteredStudents(records: StudentRecord[]): StudentRecord[] {
+    return sortStudentsByGrade(
+      records.filter((student) =>
+        gradeMatchesFilter(student.grade, gradeFilter, specificGrades)
+      )
+    );
+  }
 
   async function handleConvert() {
     if (files.length === 0) {
@@ -567,7 +639,7 @@ export default function StudentImportPage() {
         }
       );
 
-      setStudents(records);
+      setStudents(sortStudentsByGrade(records));
       setSources(importedSheets);
     } catch (convertError) {
       setError(
@@ -712,7 +784,7 @@ export default function StudentImportPage() {
       return;
     }
 
-    setTextStudents(records);
+    setTextStudents(sortStudentsByGrade(records));
   }
 
   function downloadStudents(records: StudentRecord[], filename: string) {
@@ -758,7 +830,7 @@ export default function StudentImportPage() {
 
   function handleDownload() {
     try {
-      downloadStudents(students, "converted-students.xlsx");
+      downloadStudents(getFilteredStudents(students), "converted-students.xlsx");
     } catch (downloadError) {
       setError(
         downloadError instanceof Error
@@ -770,7 +842,7 @@ export default function StudentImportPage() {
 
   function handleDownloadSms() {
     try {
-      downloadStudents(textStudents, "sms-students.xlsx");
+      downloadStudents(getFilteredStudents(textStudents), "sms-students.xlsx");
     } catch (downloadError) {
       setTextError(
         downloadError instanceof Error
@@ -782,7 +854,10 @@ export default function StudentImportPage() {
 
   function handleDownloadPayment() {
     try {
-      downloadPaymentFile(students, "other-payment-file.xlsx");
+      downloadPaymentFile(
+        getFilteredStudents(students),
+        "other-payment-file.xlsx"
+      );
     } catch (downloadError) {
       setError(
         downloadError instanceof Error
@@ -794,7 +869,10 @@ export default function StudentImportPage() {
 
   function handleDownloadSmsPayment() {
     try {
-      downloadPaymentFile(textStudents, "other-payment-file.xlsx");
+      downloadPaymentFile(
+        getFilteredStudents(textStudents),
+        "other-payment-file.xlsx"
+      );
     } catch (downloadError) {
       setTextError(
         downloadError instanceof Error
@@ -939,6 +1017,87 @@ export default function StudentImportPage() {
             )}
           </div>
 
+          <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="grid gap-4 sm:grid-cols-[minmax(14rem,0.6fr)_minmax(0,1fr)] sm:items-start">
+              <label className="text-sm font-semibold text-slate-800">
+                Grade filter for downloads
+                <select
+                  value={gradeFilter}
+                  onChange={(event) => {
+                    setGradeFilter(event.target.value as GradeFilter)
+                    setError("");
+                    setTextError("");
+                  }}
+                  className="mt-2 block w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-medium focus:border-blue-400 focus:bg-white focus:outline-none"
+                >
+                  <option value="all">All grades</option>
+                  <option value="nursery-kg3">Nursery – KG-3</option>
+                  <option value="grades-1-4">Grades 1–4</option>
+                  <option value="grades-5-8">Grades 5–8</option>
+                  <option value="grades-9-12">Grades 9–12</option>
+                  <option value="specific">Choose specific grades</option>
+                </select>
+              </label>
+              {gradeFilter === "specific" && (
+                <fieldset>
+                  <legend className="text-sm font-semibold text-slate-800">
+                    Select one or more grades
+                  </legend>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSpecificGrades(GRADE_OPTIONS)}
+                      className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      Select all
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSpecificGrades([])}
+                      className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+                    {GRADE_OPTIONS.map((grade) => (
+                      <label
+                        key={grade}
+                        className="flex items-center gap-2 rounded-lg border border-slate-100 px-3 py-2 text-sm text-slate-700"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={specificGrades.includes(grade)}
+                          onChange={(event) =>
+                            setSpecificGrades((current) =>
+                              event.target.checked
+                                ? [...current, grade]
+                                : current.filter((selected) => selected !== grade)
+                            )
+                          }
+                          className="h-4 w-4 rounded border-slate-300 text-blue-700 focus:ring-blue-600"
+                        />
+                        {grade}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+              )}
+            </div>
+            <p className="mt-3 text-xs leading-5 text-slate-500">
+              Applies to both student and payment downloads, including SMS/text
+              records. Previews remain complete. Downloads are ordered Nursery,
+              UKG, KG-1–KG-3, then grades 1–12.
+            </p>
+            {(students.length > 0 || textStudents.length > 0) && (
+              <p className="mt-1 text-xs font-medium text-slate-600">
+                Matching records: {getFilteredStudents(students).length} from
+                workbooks and {getFilteredStudents(textStudents).length} from
+                SMS/text.
+              </p>
+            )}
+          </div>
+
           <div className="mt-7">
             <button
               type="button"
@@ -999,16 +1158,20 @@ Selam G/egziabher
                     <button
                       type="button"
                       onClick={handleDownloadSms}
-                      className="rounded-xl bg-gradient-to-r from-emerald-700 to-teal-700 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-700/15 transition hover:-translate-y-0.5"
+                      disabled={getFilteredStudents(textStudents).length === 0}
+                      className="rounded-xl bg-gradient-to-r from-emerald-700 to-teal-700 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-700/15 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      Download Student Excel
+                      Download Student Excel (
+                      {getFilteredStudents(textStudents).length})
                     </button>
                     <button
                       type="button"
                       onClick={handleDownloadSmsPayment}
-                      className="rounded-xl bg-gradient-to-r from-teal-700 to-cyan-700 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-teal-700/15 transition hover:-translate-y-0.5"
+                      disabled={getFilteredStudents(textStudents).length === 0}
+                      className="rounded-xl bg-gradient-to-r from-teal-700 to-cyan-700 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-teal-700/15 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      Download Other Payment File
+                      Download Other Payment File (
+                      {getFilteredStudents(textStudents).length})
                     </button>
                   </>
                 )}
@@ -1079,16 +1242,18 @@ Selam G/egziabher
                   <button
                     type="button"
                     onClick={handleDownload}
-                    className="shrink-0 rounded-xl bg-gradient-to-r from-emerald-700 to-teal-700 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-700/15 transition hover:-translate-y-0.5"
+                    disabled={getFilteredStudents(students).length === 0}
+                    className="shrink-0 rounded-xl bg-gradient-to-r from-emerald-700 to-teal-700 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-700/15 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    Download Student Excel
+                    Download Student Excel ({getFilteredStudents(students).length})
                   </button>
                   <button
                     type="button"
                     onClick={handleDownloadPayment}
-                    className="shrink-0 rounded-xl bg-gradient-to-r from-teal-700 to-cyan-700 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-teal-700/15 transition hover:-translate-y-0.5"
+                    disabled={getFilteredStudents(students).length === 0}
+                    className="shrink-0 rounded-xl bg-gradient-to-r from-teal-700 to-cyan-700 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-teal-700/15 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    Download Other Payment File
+                    Download Other Payment File ({getFilteredStudents(students).length})
                   </button>
                 </div>
               </div>

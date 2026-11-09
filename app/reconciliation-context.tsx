@@ -13,6 +13,7 @@ export interface PaymentDifference {
   customerId: string;
   centralAmount: number;
   centralMerchantReference: string;
+  paidMerchantReference?: string;
   paidBillId: string;
   paidAmount: number | null;
   status: string;
@@ -24,8 +25,9 @@ export interface MatchedPayment {
   customerId: string;
   centralAmount: number;
   centralMerchantReference: string;
+  paidMerchantReference?: string;
   paidBillId: string;
-  paidAmount: number;
+  paidAmount: number | null;
   status: string;
 }
 
@@ -38,6 +40,7 @@ export interface ReconciliationResult {
   matchedPayments: MatchedPayment[];
   differenceCount: number;
   differences: PaymentDifference[];
+  unduplicatedRows?: Record<string, unknown>[];
 }
 
 interface ReconciliationContextValue {

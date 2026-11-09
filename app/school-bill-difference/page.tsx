@@ -8,17 +8,17 @@ import {
 } from "../reconciliation-context";
 
 export default function SchoolBillDifferencePage() {
-  const [centralFile, setCentralFile] = useState<File | null>(null);
-  const [paidFile, setPaidFile] = useState<File | null>(null);
+  const [centralFiles, setCentralFiles] = useState<File[]>([]);
+  const [paidFiles, setPaidFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState<
-    "differences" | "duplicates" | "matches" | null
+    "differences" | "duplicates" | "unduplicated" | "matches" | null
   >(null);
   const [error, setError] = useState("");
   const { schoolResult, setSchoolResult } = useReconciliation();
 
   async function handleCompare() {
-    if (!centralFile || !paidFile) {
+    if (centralFiles.length === 0 || paidFiles.length === 0) {
       setError("Please select the school Central and Paid files.");
       return;
     }
@@ -29,8 +29,8 @@ export default function SchoolBillDifferencePage() {
 
     try {
       const formData = new FormData();
-      formData.append("centralFile", centralFile);
-      formData.append("paidFile", paidFile);
+      centralFiles.forEach((file) => formData.append("centralFile", file));
+      paidFiles.forEach((file) => formData.append("paidFile", file));
 
       const response = await fetch("/api/school-reconcile", {
         method: "POST",
@@ -62,7 +62,7 @@ export default function SchoolBillDifferencePage() {
   }
 
   async function handleDownload(
-    report: "differences" | "duplicates" | "matches"
+    report: "differences" | "duplicates" | "unduplicated" | "matches"
   ) {
     if (!schoolResult) {
       setError("Compare the school files before downloading a report.");
@@ -85,6 +85,14 @@ export default function SchoolBillDifferencePage() {
         empty: schoolResult.duplicateRows.length === 0,
         emptyMessage: "There are no duplicate school rows to download.",
         failureMessage: "Failed to generate the school duplicate report.",
+      },
+      unduplicated: {
+        endpoint: "/api/school-unduplicated-report",
+        payload: { rows: schoolResult.unduplicatedRows ?? [] },
+        filename: "school-unduplicated-rows.xlsx",
+        empty: (schoolResult.unduplicatedRows ?? []).length === 0,
+        emptyMessage: "There are no unduplicated school rows to download.",
+        failureMessage: "Failed to generate the unduplicated school report.",
       },
       matches: {
         endpoint: "/api/match-report",
@@ -174,7 +182,7 @@ export default function SchoolBillDifferencePage() {
               </p>
               <label className="flex min-h-40 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/50 p-7 text-center transition hover:border-blue-400 hover:bg-blue-50">
                 <span className="font-medium text-blue-800">
-                  Select School Central File
+                  Select School Central Files
                 </span>
                 <span className="mt-2 text-xs text-slate-400">
                   XLSX or XLS format
@@ -182,18 +190,20 @@ export default function SchoolBillDifferencePage() {
                 <input
                   type="file"
                   accept=".xlsx,.xls"
+                  multiple
                   className="hidden"
                   onChange={(event) => {
-                    setCentralFile(event.target.files?.[0] ?? null);
+                    setCentralFiles(Array.from(event.target.files ?? []));
                     setSchoolResult(null);
                     setError("");
                   }}
                 />
               </label>
-              {centralFile && (
-                <p className="mt-4 flex items-center gap-2 break-all rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 ring-1 ring-emerald-100">
-                  <span aria-hidden="true">✓</span> {centralFile.name}
-                </p>
+              {centralFiles.length > 0 && (
+                <div className="mt-4 flex items-center gap-2 break-all rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 ring-1 ring-emerald-100">
+                  <span aria-hidden="true">✓</span>
+                  <span>{centralFiles.map((file) => file.name).join(", ")}</span>
+                </div>
               )}
             </div>
 
@@ -210,7 +220,7 @@ export default function SchoolBillDifferencePage() {
               </p>
               <label className="flex min-h-40 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-emerald-200 bg-emerald-50/50 p-7 text-center transition hover:border-emerald-400 hover:bg-emerald-50">
                 <span className="font-medium text-emerald-800">
-                  Select School Paid File
+                  Select School Paid Files
                 </span>
                 <span className="mt-2 text-xs text-slate-400">
                   CSV, XLSX, or XLS format
@@ -218,18 +228,20 @@ export default function SchoolBillDifferencePage() {
                 <input
                   type="file"
                   accept=".csv,.xlsx,.xls"
+                  multiple
                   className="hidden"
                   onChange={(event) => {
-                    setPaidFile(event.target.files?.[0] ?? null);
+                    setPaidFiles(Array.from(event.target.files ?? []));
                     setSchoolResult(null);
                     setError("");
                   }}
                 />
               </label>
-              {paidFile && (
-                <p className="mt-4 flex items-center gap-2 break-all rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 ring-1 ring-emerald-100">
-                  <span aria-hidden="true">✓</span> {paidFile.name}
-                </p>
+              {paidFiles.length > 0 && (
+                <div className="mt-4 flex items-center gap-2 break-all rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 ring-1 ring-emerald-100">
+                  <span aria-hidden="true">✓</span>
+                  <span>{paidFiles.map((file) => file.name).join(", ")}</span>
+                </div>
               )}
             </div>
           </div>
@@ -239,7 +251,10 @@ export default function SchoolBillDifferencePage() {
               type="button"
               onClick={handleCompare}
               disabled={
-                !centralFile || !paidFile || loading || downloading !== null
+                centralFiles.length === 0 ||
+                paidFiles.length === 0 ||
+                loading ||
+                downloading !== null
               }
               className="rounded-2xl bg-gradient-to-r from-blue-700 via-blue-700 to-indigo-700 px-10 py-4 font-semibold text-white shadow-xl shadow-blue-800/25 transition hover:-translate-y-0.5 hover:shadow-2xl disabled:cursor-not-allowed disabled:from-slate-400 disabled:to-slate-400 disabled:shadow-none"
             >
@@ -258,7 +273,7 @@ export default function SchoolBillDifferencePage() {
 
           {schoolResult && (
             <>
-              <div className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-5">
                 <SummaryCard
                   label="Central Payments"
                   value={schoolResult.totalPayments}
@@ -277,6 +292,22 @@ export default function SchoolBillDifferencePage() {
                       loading
                     }
                     onClick={() => handleDownload("duplicates")}
+                  />
+                </SummaryCard>
+                <SummaryCard
+                  label="Unduplicated Central Rows"
+                  value={(schoolResult.unduplicatedRows ?? []).length}
+                  color="text-blue-700"
+                >
+                  <DownloadButton
+                    label="Download Unduplicated Excel"
+                    loading={downloading === "unduplicated"}
+                    disabled={
+                      (schoolResult.unduplicatedRows ?? []).length === 0 ||
+                      downloading !== null ||
+                      loading
+                    }
+                    onClick={() => handleDownload("unduplicated")}
                   />
                 </SummaryCard>
                 <SummaryCard
@@ -326,13 +357,12 @@ export default function SchoolBillDifferencePage() {
                     <thead className="bg-slate-100/80 text-xs uppercase tracking-wide text-slate-600">
                       <tr>
                         <th className="whitespace-nowrap p-4">Student ID</th>
-                        <th className="whitespace-nowrap p-4">Central Amount</th>
                         <th className="whitespace-nowrap p-4">
                           Central Merchant Reference
                         </th>
-                        <th className="whitespace-nowrap p-4">Paid Reference</th>
-                        <th className="whitespace-nowrap p-4">Paid Amount</th>
-                        <th className="whitespace-nowrap p-4">Payment Status</th>
+                        <th className="whitespace-nowrap p-4">
+                          School Paid Merchant Reference
+                        </th>
                         <th className="whitespace-nowrap p-4">Difference Note</th>
                       </tr>
                     </thead>
@@ -346,21 +376,10 @@ export default function SchoolBillDifferencePage() {
                             {item.customerId || "Missing"}
                           </td>
                           <td className="whitespace-nowrap p-4">
-                            {item.centralAmount.toLocaleString()}
-                          </td>
-                          <td className="whitespace-nowrap p-4">
                             {item.centralMerchantReference || "-"}
                           </td>
                           <td className="whitespace-nowrap p-4">
-                            {item.paidBillId || "Not found"}
-                          </td>
-                          <td className="whitespace-nowrap p-4">
-                            {item.paidAmount !== null
-                              ? item.paidAmount.toLocaleString()
-                              : "Not found"}
-                          </td>
-                          <td className="whitespace-nowrap p-4">
-                            {item.status || "-"}
+                            {item.paidMerchantReference || "Not found"}
                           </td>
                           <td className="min-w-64 p-4 text-red-700">
                             {item.matchNote}
@@ -370,7 +389,7 @@ export default function SchoolBillDifferencePage() {
                       {schoolResult.differences.length === 0 && (
                         <tr>
                           <td
-                            colSpan={7}
+                            colSpan={4}
                             className="p-10 text-center font-medium text-green-700"
                           >
                             ✓ All school payments are matched!

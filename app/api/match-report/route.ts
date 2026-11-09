@@ -5,6 +5,7 @@ type MatchedPayment = {
   customerId: string;
   centralAmount: number;
   centralMerchantReference: string;
+  paidMerchantReference?: string;
   paidBillId: string;
   paidAmount: number;
   status: string;
@@ -22,9 +23,12 @@ function isMatchedPayment(value: unknown): value is MatchedPayment {
     typeof payment.centralAmount === "number" &&
     Number.isFinite(payment.centralAmount) &&
     typeof payment.centralMerchantReference === "string" &&
+    (payment.paidMerchantReference === undefined ||
+      typeof payment.paidMerchantReference === "string") &&
     typeof payment.paidBillId === "string" &&
-    typeof payment.paidAmount === "number" &&
-    Number.isFinite(payment.paidAmount) &&
+    (payment.paidAmount === null ||
+      (typeof payment.paidAmount === "number" &&
+        Number.isFinite(payment.paidAmount))) &&
     typeof payment.status === "string"
   );
 }
@@ -55,7 +59,16 @@ export async function POST(request: NextRequest) {
     workbook.created = new Date();
 
     const worksheet = workbook.addWorksheet("Matched Payments");
-    worksheet.columns = [
+    const hasPaidMerchantReference = matchedPayments.some(
+      (payment) => typeof payment.paidMerchantReference === "string"
+    );
+    worksheet.columns = hasPaidMerchantReference
+      ? [
+          { header: "Customer ID", key: "customerId", width: 20 },
+          { header: "Central Merchant Reference", key: "centralMerchantReference", width: 32 },
+          { header: "School Paid Merchant Reference", key: "paidMerchantReference", width: 32 },
+        ]
+      : [
       { header: "Customer ID", key: "customerId", width: 20 },
       { header: "Central Amount", key: "centralAmount", width: 18 },
       {
@@ -98,7 +111,10 @@ export async function POST(request: NextRequest) {
     });
 
     worksheet.views = [{ state: "frozen", ySplit: 1 }];
-    worksheet.autoFilter = { from: "A1", to: "F1" };
+    worksheet.autoFilter = {
+      from: "A1",
+      to: hasPaidMerchantReference ? "C1" : "F1",
+    };
 
     const buffer = await workbook.xlsx.writeBuffer();
 

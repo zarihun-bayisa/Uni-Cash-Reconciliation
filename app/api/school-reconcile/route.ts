@@ -7,6 +7,7 @@ type PaymentDifference = {
   customerId: string;
   centralAmount: number;
   centralMerchantReference: string;
+  paidMerchantReference: string;
   paidBillId: string;
   paidAmount: number | null;
   status: string;
@@ -18,8 +19,9 @@ type MatchedPayment = {
   customerId: string;
   centralAmount: number;
   centralMerchantReference: string;
+  paidMerchantReference: string;
   paidBillId: string;
-  paidAmount: number;
+  paidAmount: number | null;
   status: string;
 };
 
@@ -55,10 +57,6 @@ function parseAmount(value: unknown): number | null {
   return Number.isFinite(amount) ? amount : null;
 }
 
-function amountsMatch(left: number, right: number): boolean {
-  return Math.trunc(left) === Math.trunc(right);
-}
-
 function readRows(buffer: Buffer): ExcelRow[] {
   const workbook = XLSX.read(buffer, { type: "buffer" });
   const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -84,7 +82,9 @@ function paymentDifference(
   const billIds = [
     ...new Set(
       candidates
-        .map((row) => normalize(getField(row, ["reference", "Bill ID"])))
+        .map((row) =>
+          normalize(getField(row, ["reference", "Bill ID", "Bills", "Bill"]))
+        )
         .filter(Boolean)
     ),
   ];
@@ -109,6 +109,15 @@ function paymentDifference(
     customerId,
     centralAmount,
     centralMerchantReference: merchantReference,
+    paidMerchantReference: [
+      ...new Set(
+        candidates
+          .map((row) =>
+            preserveText(getField(row, ["merchantReference", "Merchant Reference"]))
+          )
+          .filter(Boolean)
+      ),
+    ].join(", "),
     paidBillId: billIds.length === 1 ? billIds[0] : billIds.join(", "),
     paidAmount: amounts.length === 1 ? amounts[0] : null,
     status: statuses.join(", "),
@@ -120,71 +129,85 @@ function paymentDifference(
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
-    const centralFile = formData.get("centralFile");
-    const paidFile = formData.get("paidFile");
+    const centralEntries = formData.getAll("centralFile");
+    const paidEntries = formData.getAll("paidFile");
+    const centralFiles = centralEntries.filter(
+      (entry): entry is File => entry instanceof File
+    );
+    const paidFiles = paidEntries.filter(
+      (entry): entry is File => entry instanceof File
+    );
 
-    if (!(centralFile instanceof File) || !(paidFile instanceof File)) {
+    if (
+      centralFiles.length === 0 ||
+      paidFiles.length === 0 ||
+      centralFiles.length !== centralEntries.length ||
+      paidFiles.length !== paidEntries.length
+    ) {
       return NextResponse.json(
         { error: "Please upload both school Central and Paid files." },
         { status: 400 }
       );
     }
 
-    const centralExtension = centralFile.name.toLowerCase();
-    const paidExtension = paidFile.name.toLowerCase();
-    if (!/\.(xlsx|xls)$/.test(centralExtension)) {
+    if (centralFiles.some((file) => !/\.(xlsx|xls)$/i.test(file.name))) {
       return NextResponse.json(
-        { error: "The school Central file must be an XLSX or XLS workbook." },
+        { error: "All school Central files must be XLSX or XLS workbooks." },
         { status: 400 }
       );
     }
-    if (!/\.(csv|xlsx|xls)$/.test(paidExtension)) {
+    if (paidFiles.some((file) => !/\.(csv|xlsx|xls)$/i.test(file.name))) {
       return NextResponse.json(
-        { error: "The school Paid file must be a CSV, XLSX, or XLS workbook." },
+        { error: "All school Paid files must be CSV, XLSX, or XLS files." },
         { status: 400 }
       );
     }
 
-    const centralRows = readRows(
-      Buffer.from(await centralFile.arrayBuffer())
-    );
-    const paidRows = readRows(Buffer.from(await paidFile.arrayBuffer()));
+    const centralRows = (
+      await Promise.all(
+        centralFiles.map(async (file) =>
+          readRows(Buffer.from(await file.arrayBuffer()))
+        )
+      )
+    ).flat();
+    const paidRows = (
+      await Promise.all(
+        paidFiles.map(async (file) =>
+          readRows(Buffer.from(await file.arrayBuffer()))
+        )
+      )
+    ).flat();
 
     const uniqueRows: ExcelRow[] = [];
     const duplicateRows: ExcelRow[] = [];
-    const seenPayments = new Set<string>();
+    const seenMerchantReferences = new Set<string>();
 
     for (const row of centralRows) {
-      const customerId = normalize(
-        getField(row, ["Customer Id", "Customer ID"])
-      );
-      const amount = parseAmount(getField(row, ["Amount"]));
-      const merchantReference = preserveText(
+      const merchantReference = normalize(
         getField(row, ["Merchant Reference"])
       );
 
-      if (customerId && amount !== null) {
-        const key = JSON.stringify([customerId, amount, merchantReference]);
-        if (seenPayments.has(key)) {
+      if (merchantReference) {
+        if (seenMerchantReferences.has(merchantReference)) {
           duplicateRows.push(row);
           continue;
         }
-        seenPayments.add(key);
+        seenMerchantReferences.add(merchantReference);
       }
 
       uniqueRows.push(row);
     }
 
-    const paidByStudent = new Map<string, ExcelRow[]>();
+    const paidByMerchantReference = new Map<string, ExcelRow[]>();
     for (const row of paidRows) {
-      const studentId = normalize(
-        getField(row, ["studentId", "Student ID", "Customer Id"])
+      const merchantReference = normalize(
+        getField(row, ["merchantReference", "Merchant Reference"])
       );
-      if (!studentId) continue;
+      if (!merchantReference) continue;
 
-      const records = paidByStudent.get(studentId) ?? [];
+      const records = paidByMerchantReference.get(merchantReference) ?? [];
       records.push(row);
-      paidByStudent.set(studentId, records);
+      paidByMerchantReference.set(merchantReference, records);
     }
 
     const occurrences = new Map<string, number>();
@@ -210,102 +233,52 @@ export async function POST(request: NextRequest) {
       );
       const rowOccurrences = occurrences.get(customerId) ?? 0;
 
-      if (!customerId || centralAmount === null || !merchantReference) {
+      if (!merchantReference) {
         differences.push(
           paymentDifference(
             customerId,
             centralAmount ?? 0,
             merchantReference,
             rowOccurrences,
-            "Incomplete Central payment information"
+            "Merchant Reference is missing"
           )
         );
         continue;
       }
 
-      const candidates = paidByStudent.get(customerId) ?? [];
+      const candidates =
+        paidByMerchantReference.get(normalize(merchantReference)) ?? [];
       if (candidates.length === 0) {
         differences.push(
           paymentDifference(
             customerId,
-            centralAmount,
+            centralAmount ?? 0,
             merchantReference,
             rowOccurrences,
-            "Student ID not found in School Paid file"
+            "Merchant Reference not found in School Paid file"
           )
         );
         continue;
       }
 
-      const exactMatch = candidates.find((candidate) => {
-        const paidReference = preserveText(
-          getField(candidate, ["merchantReference", "Merchant Reference"])
-        );
-        const paidAmount = parseAmount(
-          getField(candidate, ["totalAmount", "Total Amount"])
-        );
-        return (
-          paidReference === merchantReference &&
-          paidAmount !== null &&
-          amountsMatch(paidAmount, centralAmount)
-        );
+      const matchedRow = candidates[0];
+      matchedPayments.push({
+        customerId,
+        centralAmount: centralAmount ?? 0,
+        centralMerchantReference: merchantReference,
+        paidMerchantReference: preserveText(
+          getField(matchedRow, ["merchantReference", "Merchant Reference"])
+        ),
+        paidBillId: normalize(
+          getField(matchedRow, ["reference", "Bill ID", "Bills", "Bill"])
+        ),
+        paidAmount: parseAmount(
+          getField(matchedRow, ["totalAmount", "Total Amount"])
+        ),
+        status: normalize(
+          getField(matchedRow, ["paymentStatus", "Status"])
+        ),
       });
-
-      if (exactMatch) {
-        const paidAmount = parseAmount(
-          getField(exactMatch, ["totalAmount", "Total Amount"])
-        );
-        if (paidAmount !== null) {
-          matchedPayments.push({
-            customerId,
-            centralAmount,
-            centralMerchantReference: merchantReference,
-            paidBillId: normalize(
-              getField(exactMatch, ["reference", "Bill ID"])
-            ),
-            paidAmount,
-            status: normalize(
-              getField(exactMatch, ["paymentStatus", "Status"])
-            ),
-          });
-          continue;
-        }
-      }
-
-      let note = "Payment details do not match";
-      if (candidates.length > 1) {
-        note = "Multiple Paid records found; review required";
-      } else {
-        const candidate = candidates[0];
-        const paidReference = preserveText(
-          getField(candidate, ["merchantReference", "Merchant Reference"])
-        );
-        const paidAmount = parseAmount(
-          getField(candidate, ["totalAmount", "Total Amount"])
-        );
-
-        if (
-          paidReference !== merchantReference &&
-          (paidAmount === null || !amountsMatch(paidAmount, centralAmount))
-        ) {
-          note = "Merchant Reference and Amount do not match";
-        } else if (paidReference !== merchantReference) {
-          note = "Merchant Reference does not match";
-        } else {
-          note = "Central Amount and Paid Amount do not match";
-        }
-      }
-
-      differences.push(
-        paymentDifference(
-          customerId,
-          centralAmount,
-          merchantReference,
-          rowOccurrences,
-          note,
-          candidates
-        )
-      );
     }
 
     return NextResponse.json({
@@ -313,6 +286,7 @@ export async function POST(request: NextRequest) {
       totalPayments: uniqueRows.length,
       duplicateCount: duplicateRows.length,
       duplicateRows,
+      unduplicatedRows: uniqueRows,
       matchedCount: matchedPayments.length,
       matchedPayments,
       differenceCount: differences.length,

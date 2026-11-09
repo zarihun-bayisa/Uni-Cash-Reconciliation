@@ -6,6 +6,7 @@ export async function POST(request: NextRequest) {
   try {
     const data = await request.json();
     const differences = data.differences;
+    const isUniCashFormat = data.format === "unicash";
 
     if (!Array.isArray(differences)) {
       return NextResponse.json(
@@ -21,27 +22,59 @@ export async function POST(request: NextRequest) {
 
     const worksheet = workbook.addWorksheet("Differences");
 
-    // Report columns follow the Feres Meda format.
-    worksheet.columns = [
-      { header: "Customer ID", key: "customerId", width: 20 },
-      { header: "004496 Amount", key: "centralAmount", width: 18 },
-      {
-        header: "004496 Merchant Reference",
-        key: "centralMerchantReference",
-        width: 30,
-      },
-      { header: "Bill Id", key: "paidBillId", width: 22 },
-      { header: "Paid Amount", key: "paidAmount", width: 18 },
-      { header: "Status", key: "status", width: 16 },
-      {
-        header: "Occurrences in 004496",
-        key: "occurrences",
-        width: 22,
-      },
-      { header: "Match Note", key: "matchNote", width: 42 },
-    ];
-
-    worksheet.addRows(differences);
+    if (isUniCashFormat) {
+      worksheet.columns = [
+        { header: "ContractNumber", key: "customerId", width: 20 },
+        { header: "Central Bill Id", key: "centralMerchantReference", width: 22 },
+        { header: "central Amount", key: "centralAmount", width: 18 },
+        { header: "Bill Id - From bill", key: "paidBillId", width: 24 },
+        { header: "Bill Amount", key: "paidAmount", width: 18 },
+        { header: "Status", key: "status", width: 18 },
+      ];
+      worksheet.addRows(
+        differences.map((difference) => ({
+          customerId: difference.customerId,
+          centralMerchantReference: difference.centralMerchantReference,
+          centralAmount: difference.centralAmount,
+          paidBillId: difference.paidBillId,
+          paidAmount: difference.paidAmount,
+          status: difference.status,
+        }))
+      );
+    } else {
+      const hasPaidMerchantReference = differences.some(
+        (difference) => typeof difference.paidMerchantReference === "string"
+      );
+      if (hasPaidMerchantReference) {
+        worksheet.columns = [
+          { header: "Customer ID", key: "customerId", width: 20 },
+          { header: "Central Merchant Reference", key: "centralMerchantReference", width: 32 },
+          { header: "School Paid Merchant Reference", key: "paidMerchantReference", width: 32 },
+          { header: "Match Note", key: "matchNote", width: 42 },
+        ];
+        worksheet.addRows(differences);
+      } else {
+        worksheet.columns = [
+        { header: "Customer ID", key: "customerId", width: 20 },
+        { header: "004496 Amount", key: "centralAmount", width: 18 },
+        {
+          header: "004496 Merchant Reference",
+          key: "centralMerchantReference",
+          width: 30,
+        },
+        { header: "Bill Id", key: "paidBillId", width: 22 },
+        { header: "Paid Amount", key: "paidAmount", width: 18 },
+        { header: "Status", key: "status", width: 16 },
+        {
+          header: "Occurrences in 004496",
+          key: "occurrences",
+          width: 22,
+        },
+        { header: "Match Note", key: "matchNote", width: 42 },
+      ];
+      worksheet.addRows(differences);
+      }
+    }
 
     // Format the heading row.
     const header = worksheet.getRow(1);
@@ -83,7 +116,13 @@ export async function POST(request: NextRequest) {
     worksheet.views = [{ state: "frozen", ySplit: 1 }];
     worksheet.autoFilter = {
       from: "A1",
-      to: "H1",
+      to: isUniCashFormat
+        ? "F1"
+        : differences.some(
+              (difference) => typeof difference.paidMerchantReference === "string"
+            )
+          ? "D1"
+          : "H1",
     };
 
     const buffer = await workbook.xlsx.writeBuffer();
@@ -94,7 +133,7 @@ export async function POST(request: NextRequest) {
         "Content-Type":
           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "Content-Disposition":
-          'attachment; filename="Feres_Meda_Difference.xlsx"',
+          `attachment; filename="${isUniCashFormat ? "unicash bill difference.xlsx" : "Feres_Meda_Difference.xlsx"}"`,
       },
     });
   } catch (error) {

@@ -28,6 +28,10 @@ function normalize(value: unknown): string {
   return String(value ?? "").trim().toUpperCase();
 }
 
+function customerIdText(value: unknown): string {
+  return String(value ?? "");
+}
+
 function normalizeHeader(value: unknown): string {
   return normalize(value).replace(/[^A-Z0-9]/g, "");
 }
@@ -80,10 +84,21 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
 
-    const centralFile = formData.get("centralFile");
-    const paidFile = formData.get("paidFile");
+    const centralEntries = formData.getAll("centralFile");
+    const paidEntries = formData.getAll("paidFile");
+    const centralFiles = centralEntries.filter(
+      (entry): entry is File => entry instanceof File
+    );
+    const paidFiles = paidEntries.filter(
+      (entry): entry is File => entry instanceof File
+    );
 
-    if (!(centralFile instanceof File) || !(paidFile instanceof File)) {
+    if (
+      centralFiles.length === 0 ||
+      paidFiles.length === 0 ||
+      centralFiles.length !== centralEntries.length ||
+      paidFiles.length !== paidEntries.length
+    ) {
       return NextResponse.json(
         { error: "Please upload both Central and Paid Excel files." },
         { status: 400 }
@@ -92,7 +107,7 @@ export async function POST(request: NextRequest) {
 
     const allowedExtensions = [".xlsx", ".xls"];
 
-    for (const file of [centralFile, paidFile]) {
+    for (const file of [...centralFiles, ...paidFiles]) {
       const validExtension = allowedExtensions.some((extension) =>
         file.name.toLowerCase().endsWith(extension)
       );
@@ -105,11 +120,20 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const centralBuffer = Buffer.from(await centralFile.arrayBuffer());
-    const paidBuffer = Buffer.from(await paidFile.arrayBuffer());
-
-    const centralRows = readExcel(centralBuffer);
-    const paidRows = readExcel(paidBuffer);
+    const centralRows = (
+      await Promise.all(
+        centralFiles.map(async (file) =>
+          readExcel(Buffer.from(await file.arrayBuffer()))
+        )
+      )
+    ).flat();
+    const paidRows = (
+      await Promise.all(
+        paidFiles.map(async (file) =>
+          readExcel(Buffer.from(await file.arrayBuffer()))
+        )
+      )
+    ).flat();
 
     const uniqueCentralRows: ExcelRow[] = [];
     const duplicateRows: ExcelRow[] = [];
@@ -117,7 +141,7 @@ export async function POST(request: NextRequest) {
     let duplicateCount = 0;
 
     for (const row of centralRows) {
-      const customerId = normalize(
+      const customerId = customerIdText(
         getField(row, ["Customer Id", "Customer ID"])
       );
       const amount = parseAmount(getField(row, ["Amount"]));
@@ -125,7 +149,7 @@ export async function POST(request: NextRequest) {
         getField(row, ["Merchant Reference"])
       );
 
-      if (customerId && amount !== null) {
+      if (customerId.trim() && amount !== null) {
         const paymentKey = JSON.stringify([
           customerId,
           amount,
@@ -148,11 +172,11 @@ export async function POST(request: NextRequest) {
     const paidByCustomer = new Map<string, ExcelRow[]>();
 
     for (const row of paidRows) {
-      const customerId = normalize(
+      const customerId = customerIdText(
         getField(row, ["Contract Number"])
       );
 
-      if (!customerId) continue;
+      if (!customerId.trim()) continue;
 
       const existing = paidByCustomer.get(customerId) ?? [];
       existing.push(row);
@@ -163,11 +187,11 @@ export async function POST(request: NextRequest) {
     const occurrences = new Map<string, number>();
 
     for (const row of uniqueCentralRows) {
-      const customerId = normalize(
+      const customerId = customerIdText(
         getField(row, ["Customer Id", "Customer ID"])
       );
 
-      if (customerId) {
+      if (customerId.trim()) {
         occurrences.set(
           customerId,
           (occurrences.get(customerId) ?? 0) + 1
@@ -180,7 +204,7 @@ export async function POST(request: NextRequest) {
     const differences: PaymentDifference[] = [];
 
     for (const centralRow of uniqueCentralRows) {
-      const customerId = normalize(
+      const customerId = customerIdText(
         getField(centralRow, ["Customer Id", "Customer ID"])
       );
 
@@ -192,7 +216,7 @@ export async function POST(request: NextRequest) {
         getField(centralRow, ["Merchant Reference"])
       );
 
-      if (!customerId || centralAmount === null || !merchantReference) {
+      if (!customerId.trim() || centralAmount === null || !merchantReference) {
         differences.push({
           customerId,
           centralAmount: centralAmount ?? 0,

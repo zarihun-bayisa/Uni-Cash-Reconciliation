@@ -2,7 +2,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import AppHeader from "./app-header";
 import {
   useReconciliation,
@@ -14,19 +13,21 @@ export default function WaterReconciliationPage({
 }: {
   heading?: string;
 }) {
-  const [centralFile, setCentralFile] = useState<File | null>(null);
-  const [paidFile, setPaidFile] = useState<File | null>(null);
+  const [centralFiles, setCentralFiles] = useState<File[]>([]);
+  const [paidFiles, setPaidFiles] = useState<File[]>([]);
 
   const [loading, setLoading] = useState(false);
   const [downloadingDuplicates, setDownloadingDuplicates] = useState(false);
   const [downloadingMatches, setDownloadingMatches] = useState(false);
+  const [downloadingDifferences, setDownloadingDifferences] = useState(false);
+  const [showDifferences, setShowDifferences] = useState(false);
 
   const [error, setError] = useState("");
   const { result, setResult } = useReconciliation();
 
   // Compare Central and Paid Excel files
   async function handleCompare() {
-    if (!centralFile || !paidFile) {
+    if (centralFiles.length === 0 || paidFiles.length === 0) {
       setError("Please select both Excel files.");
       return;
     }
@@ -34,12 +35,13 @@ export default function WaterReconciliationPage({
     setLoading(true);
     setError("");
     setResult(null);
+    setShowDifferences(false);
 
     try {
       const formData = new FormData();
 
-      formData.append("centralFile", centralFile);
-      formData.append("paidFile", paidFile);
+      centralFiles.forEach((file) => formData.append("centralFile", file));
+      paidFiles.forEach((file) => formData.append("paidFile", file));
 
       const response = await fetch("/api/reconcile", {
         method: "POST",
@@ -160,6 +162,51 @@ export default function WaterReconciliationPage({
     }
   }
 
+  async function handleDownloadDifferences() {
+    if (!result || result.differences.length === 0) {
+      setError("There are no bill differences to download.");
+      return;
+    }
+
+    setDownloadingDifferences(true);
+    setError("");
+
+    try {
+      const response = await fetch("/api/water-report", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          differences: result.differences,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to generate the difference report.");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "unicash-bill-difference.xlsx";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (downloadError) {
+      setError(
+        downloadError instanceof Error
+          ? downloadError.message
+          : "Could not download the bill difference report."
+      );
+    } finally {
+      setDownloadingDifferences(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/70 text-slate-900 md:flex">
 
@@ -209,7 +256,7 @@ export default function WaterReconciliationPage({
             <label className="flex min-h-40 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/50 p-7 text-center transition hover:border-blue-400 hover:bg-blue-50">
 
               <span className="font-medium text-blue-800">
-                Select Central Excel File
+                Select Central Excel Files
               </span>
 
               <span className="text-xs text-slate-400 mt-2">
@@ -219,19 +266,22 @@ export default function WaterReconciliationPage({
               <input
                 type="file"
                 accept=".xlsx,.xls"
+                multiple
                 className="hidden"
                 onChange={(e) => {
-                  setCentralFile(e.target.files?.[0] || null);
+                  setCentralFiles(Array.from(e.target.files ?? []));
                   setResult(null);
+                  setShowDifferences(false);
                   setError("");
                 }}
               />
 
             </label>
 
-            {centralFile && (
+            {centralFiles.length > 0 && (
               <div className="mt-4 flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 break-all ring-1 ring-emerald-100">
-                <span aria-hidden="true">✓</span> {centralFile.name}
+                <span aria-hidden="true">✓</span>
+                <span>{centralFiles.map((file) => file.name).join(", ")}</span>
               </div>
             )}
 
@@ -257,7 +307,7 @@ export default function WaterReconciliationPage({
             <label className="flex min-h-40 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-emerald-200 bg-emerald-50/50 p-7 text-center transition hover:border-emerald-400 hover:bg-emerald-50">
 
               <span className="font-medium text-green-800">
-                Select Uni-Cash File
+                Select Uni-Cash Files
               </span>
 
               <span className="text-xs text-slate-400 mt-2">
@@ -267,19 +317,22 @@ export default function WaterReconciliationPage({
               <input
                 type="file"
                 accept=".xlsx,.xls"
+                multiple
                 className="hidden"
                 onChange={(e) => {
-                  setPaidFile(e.target.files?.[0] || null);
+                  setPaidFiles(Array.from(e.target.files ?? []));
                   setResult(null);
+                  setShowDifferences(false);
                   setError("");
                 }}
               />
 
             </label>
 
-            {paidFile && (
+            {paidFiles.length > 0 && (
               <div className="mt-4 flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 break-all ring-1 ring-emerald-100">
-                <span aria-hidden="true">✓</span> {paidFile.name}
+                <span aria-hidden="true">✓</span>
+                <span>{paidFiles.map((file) => file.name).join(", ")}</span>
               </div>
             )}
 
@@ -293,11 +346,12 @@ export default function WaterReconciliationPage({
           <button
             onClick={handleCompare}
             disabled={
-              !centralFile ||
-              !paidFile ||
+              centralFiles.length === 0 ||
+              paidFiles.length === 0 ||
               loading ||
               downloadingDuplicates ||
-              downloadingMatches
+              downloadingMatches ||
+              downloadingDifferences
             }
             className="rounded-2xl bg-gradient-to-r from-blue-700 via-blue-700 to-indigo-700 px-10 py-4 font-semibold text-white shadow-xl shadow-blue-800/25 transition hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-blue-800/30 disabled:cursor-not-allowed disabled:from-slate-400 disabled:to-slate-400 disabled:shadow-none"
           >
@@ -400,15 +454,108 @@ export default function WaterReconciliationPage({
                 <h3 className="text-3xl font-bold text-red-600 mt-2">
                   {result.differenceCount.toLocaleString()}
                 </h3>
-                <Link
-                  href="/bill-difference"
+                <button
+                  type="button"
+                  onClick={() => setShowDifferences((visible) => !visible)}
                   className="mt-4 inline-flex rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-800"
                 >
-                  View Bill Difference
-                </Link>
+                  {showDifferences ? "Hide Bill Difference" : "View Bill Difference"}
+                </button>
               </div>
 
             </div>
+
+            {showDifferences && (
+              <div className="mt-8 overflow-hidden rounded-3xl border border-slate-200/80 bg-white/95 shadow-xl shadow-slate-200/50">
+                <div className="flex flex-col gap-4 border-b border-slate-100 bg-gradient-to-r from-white to-rose-50/60 p-6 sm:flex-row sm:items-center sm:justify-between sm:p-7">
+                  <div>
+                    <h3 className="text-xl font-bold">Bill Differences</h3>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Showing {result.differences.length.toLocaleString()} records.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleDownloadDifferences}
+                    disabled={
+                      result.differences.length === 0 ||
+                      downloadingDifferences ||
+                      downloadingDuplicates ||
+                      downloadingMatches ||
+                      loading
+                    }
+                    className="shrink-0 rounded-lg bg-red-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                  >
+                    {downloadingDifferences
+                      ? "Generating Report..."
+                      : "Download Difference Excel"}
+                  </button>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-100/80 text-xs uppercase tracking-wide text-slate-600">
+                      <tr>
+                        <th className="whitespace-nowrap p-4">Customer ID</th>
+                        <th className="whitespace-nowrap p-4">Central Amount</th>
+                        <th className="whitespace-nowrap p-4">
+                          Central Merchant Reference
+                        </th>
+                        <th className="whitespace-nowrap p-4">Paid Bill ID</th>
+                        <th className="whitespace-nowrap p-4">Paid Amount</th>
+                        <th className="whitespace-nowrap p-4">Payment Status</th>
+                        <th className="whitespace-nowrap p-4">Occurrences</th>
+                        <th className="min-w-64 p-4">Difference Note</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.differences.map((item, index) => (
+                        <tr
+                          key={`${item.customerId}-${index}`}
+                          className="border-t border-slate-100 odd:bg-white even:bg-slate-50/50 hover:bg-rose-50/70"
+                        >
+                          <td className="whitespace-nowrap p-4 font-medium">
+                            {item.customerId || "Missing"}
+                          </td>
+                          <td className="whitespace-nowrap p-4">
+                            {item.centralAmount.toLocaleString()}
+                          </td>
+                          <td className="whitespace-nowrap p-4">
+                            {item.centralMerchantReference || "-"}
+                          </td>
+                          <td className="whitespace-nowrap p-4">
+                            {item.paidBillId || "Not found"}
+                          </td>
+                          <td className="whitespace-nowrap p-4">
+                            {item.paidAmount !== null
+                              ? item.paidAmount.toLocaleString()
+                              : "Not found"}
+                          </td>
+                          <td className="whitespace-nowrap p-4">
+                            {item.status || "-"}
+                          </td>
+                          <td className="whitespace-nowrap p-4">
+                            {item.occurrences.toLocaleString()}
+                          </td>
+                          <td className="min-w-64 p-4 text-red-700">
+                            {item.matchNote}
+                          </td>
+                        </tr>
+                      ))}
+                      {result.differences.length === 0 && (
+                        <tr>
+                          <td
+                            colSpan={8}
+                            className="p-10 text-center font-medium text-green-700"
+                          >
+                            All payments are matched.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
           </>
         )}
