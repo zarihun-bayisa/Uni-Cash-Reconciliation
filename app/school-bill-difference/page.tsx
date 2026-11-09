@@ -138,34 +138,43 @@ export default function SchoolBillDifferencePage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 md:flex">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/70 text-slate-900 md:flex">
       <AppHeader />
       <main className="min-w-0 flex-1">
-        <section className="mx-auto max-w-7xl px-6 py-10">
+        <section className="mx-auto max-w-7xl px-5 py-8 sm:px-8 sm:py-10">
           <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.16em] text-blue-700">
-                School Reconciliation
-              </p>
-              <h2 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">
-                School Bill Difference
-              </h2>
-              <p className="mt-2 max-w-2xl text-slate-500">
+            <div className="relative w-full overflow-hidden rounded-[2rem] bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-900 px-6 py-8 text-white shadow-2xl shadow-blue-950/15 sm:px-9 sm:py-10">
+              <div aria-hidden="true" className="absolute -right-10 -top-28 h-80 w-80 rounded-full border-[40px] border-white/[0.04]" />
+              <div className="relative">
+                <p className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-blue-100">
+                  <span className="h-1.5 w-1.5 rounded-full bg-cyan-300" />
+                  School reconciliation
+                </p>
+                <h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">
+                  School Bill Difference
+                </h2>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-blue-100 sm:text-base">
                 Compare school payment records by Student ID, Amount, and
                 Merchant Reference. Amounts are compared using the whole-number
                 portion only; digits after the decimal point are ignored.
-              </p>
+                </p>
+              </div>
             </div>
           </div>
 
           <div className="grid gap-6 md:grid-cols-2">
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h3 className="mb-2 text-lg font-semibold">School Central File</h3>
+            <div className="rounded-3xl border border-slate-200/80 bg-white/90 p-6 shadow-lg shadow-slate-200/40 transition duration-200 hover:-translate-y-1 hover:border-blue-200 hover:shadow-xl sm:p-7">
+              <div className="mb-5 flex items-center gap-4">
+                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-2xl ring-1 ring-blue-100">📊</span>
+                <div>
+                  <h3 className="text-lg font-bold tracking-tight text-slate-900">School Central File</h3>
+                  <p className="mt-1 text-xs font-medium uppercase tracking-wider text-blue-700">Source payments</p>
+                </div>
+              </div>
               <p className="mb-5 text-sm text-slate-500">
                 Upload the school Central payment export (XLSX or XLS).
               </p>
-              <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-blue-300 p-8 transition hover:bg-blue-50">
-                <span className="mb-3 text-4xl">📊</span>
+              <label className="flex min-h-40 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/50 p-7 text-center transition hover:border-blue-400 hover:bg-blue-50">
                 <span className="font-medium text-blue-800">
                   Select School Central File
                 </span>
@@ -184,19 +193,24 @@ export default function SchoolBillDifferencePage() {
                 />
               </label>
               {centralFile && (
-                <p className="mt-4 break-all text-sm text-green-700">
-                  ✓ {centralFile.name}
+                <p className="mt-4 flex items-center gap-2 break-all rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 ring-1 ring-emerald-100">
+                  <span aria-hidden="true">✓</span> {centralFile.name}
                 </p>
               )}
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h3 className="mb-2 text-lg font-semibold">School Paid File</h3>
+            <div className="rounded-3xl border border-slate-200/80 bg-white/90 p-6 shadow-lg shadow-slate-200/40 transition duration-200 hover:-translate-y-1 hover:border-emerald-200 hover:shadow-xl sm:p-7">
+              <div className="mb-5 flex items-center gap-4">
+                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-2xl ring-1 ring-emerald-100">📁</span>
+                <div>
+                  <h3 className="text-lg font-bold tracking-tight text-slate-900">School Paid File</h3>
+                  <p className="mt-1 text-xs font-medium uppercase tracking-wider text-emerald-700">Billing export</p>
+                </div>
+              </div>
               <p className="mb-5 text-sm text-slate-500">
                 Upload the school billing export (CSV, XLSX, or XLS).
               </p>
-              <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-emerald-300 p-8 transition hover:bg-emerald-50">
-                <span className="mb-3 text-4xl">📁</span>
+              <label className="flex min-h-40 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-emerald-200 bg-emerald-50/50 p-7 text-center transition hover:border-emerald-400 hover:bg-emerald-50">
                 <span className="font-medium text-emerald-800">
                   Select School Paid File
                 </span>
@@ -215,8 +229,8 @@ export default function SchoolBillDifferencePage() {
                 />
               </label>
               {paidFile && (
-                <p className="mt-4 break-all text-sm text-green-700">
-                  ✓ {paidFile.name}
+                <p className="mt-4 flex items-center gap-2 break-all rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 ring-1 ring-emerald-100">
+                  <span aria-hidden="true">✓</span> {paidFile.name}
                 </p>
               )}
             </div>
@@ -229,7 +243,7 @@ export default function SchoolBillDifferencePage() {
               disabled={
                 !centralFile || !paidFile || loading || downloading !== null
               }
-              className="rounded-xl bg-blue-700 px-10 py-4 font-semibold text-white shadow-lg shadow-blue-700/20 transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:shadow-none"
+              className="rounded-2xl bg-gradient-to-r from-blue-700 via-blue-700 to-indigo-700 px-10 py-4 font-semibold text-white shadow-xl shadow-blue-800/25 transition hover:-translate-y-0.5 hover:shadow-2xl disabled:cursor-not-allowed disabled:from-slate-400 disabled:to-slate-400 disabled:shadow-none"
             >
               {loading ? "Comparing School Payments..." : "Compare School Bills"}
             </button>
@@ -301,8 +315,8 @@ export default function SchoolBillDifferencePage() {
                 </SummaryCard>
               </div>
 
-              <div className="mt-10 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                <div className="border-b border-slate-200 p-6">
+              <div className="mt-10 overflow-hidden rounded-3xl border border-slate-200/80 bg-white/95 shadow-xl shadow-slate-200/50">
+                <div className="border-b border-slate-100 bg-gradient-to-r from-white to-blue-50/60 p-6 sm:p-7">
                   <h3 className="text-xl font-bold">School Bill Differences</h3>
                   <p className="mt-1 text-sm text-slate-500">
                     Showing{" "}
@@ -311,7 +325,7 @@ export default function SchoolBillDifferencePage() {
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-sm">
-                    <thead className="bg-slate-50 text-slate-600">
+                    <thead className="bg-slate-100/80 text-xs uppercase tracking-wide text-slate-600">
                       <tr>
                         <th className="whitespace-nowrap p-4">Student ID</th>
                         <th className="whitespace-nowrap p-4">Central Amount</th>
@@ -328,7 +342,7 @@ export default function SchoolBillDifferencePage() {
                       {schoolResult.differences.map((item, index) => (
                         <tr
                           key={`${item.customerId}-${index}`}
-                          className="border-t border-slate-200 hover:bg-slate-50"
+                          className="border-t border-slate-100 odd:bg-white even:bg-slate-50/50 hover:bg-blue-50/70"
                         >
                           <td className="whitespace-nowrap p-4 font-medium">
                             {item.customerId || "Missing"}
@@ -389,7 +403,7 @@ function SummaryCard({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div className="rounded-3xl border border-slate-200/80 bg-gradient-to-br from-white to-blue-50/40 p-6 shadow-lg shadow-slate-200/40 transition duration-200 hover:-translate-y-0.5 hover:shadow-xl">
       <p className="text-sm font-medium text-slate-500">{label}</p>
       <h3 className={`mt-2 text-3xl font-bold ${color}`}>
         {value.toLocaleString()}
@@ -415,7 +429,7 @@ function DownloadButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="mt-4 rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+      className="mt-4 rounded-xl bg-gradient-to-r from-blue-700 to-indigo-700 px-4 py-2.5 text-sm font-semibold text-white shadow-md shadow-blue-800/15 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:from-slate-400 disabled:to-slate-400 disabled:hover:translate-y-0"
     >
       {loading ? "Generating Report..." : `⬇ ${label}`}
     </button>
