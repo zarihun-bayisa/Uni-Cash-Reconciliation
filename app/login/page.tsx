@@ -96,9 +96,6 @@ export default function LoginPage() {
           <h2 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">
             Sign in to your account
           </h2>
-          <p className="mt-3 text-sm leading-6 text-slate-500">
-            Enter your credentials to open the reconciliation dashboard.
-          </p>
 
           <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
             <div>

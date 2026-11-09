@@ -824,9 +824,7 @@ export default function StudentImportPage() {
                 Student Import
               </h2>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-blue-100 sm:text-base">
-              Upload a school Excel list. Columns are detected automatically,
-              then student records are arranged in the Uni-Cash template for
-              review and download.
+                Convert student spreadsheets into the Uni-Cash template.
               </p>
             </div>
           </div>
@@ -842,15 +840,7 @@ export default function StudentImportPage() {
               <div>
                 <h3 className="text-lg font-bold tracking-tight text-slate-900">Upload student workbooks</h3>
                 <p className="mt-1 text-sm leading-6 text-slate-500">
-              Extra columns such as fees are ignored. Missing IDs follow the
-              existing ID format on their worksheet when available; otherwise
-              they use your chosen prefix and a unique three-digit number.
-              A combined name column is split into first, second, and third
-              names; missing third names default to AA. Blank grades use the
-              latest recognized grade above them. Empty sections and phone
-              numbers default to A and 09. Student records from every
-              worksheets in all selected files are combined into one export;
-              when a sheet has multiple phone columns, the first one is used.
+                  Select student Excel files to prepare an import-ready workbook.
                 </p>
               </div>
             </div>

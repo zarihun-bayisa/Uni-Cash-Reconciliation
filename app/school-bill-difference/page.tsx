@@ -154,9 +154,7 @@ export default function SchoolBillDifferencePage() {
                   School Bill Difference
                 </h2>
                 <p className="mt-3 max-w-2xl text-sm leading-6 text-blue-100 sm:text-base">
-                Compare school payment records by Student ID, Amount, and
-                Merchant Reference. Amounts are compared using the whole-number
-                portion only; digits after the decimal point are ignored.
+                  Compare school payments and review bill differences.
                 </p>
               </div>
             </div>
