@@ -71,8 +71,7 @@ type DetectedSheet = {
 
 type IdState = {
   usedIds: Set<string>;
-  fallbackPrefix: string;
-  fallbackNextNumber: number;
+  fallbackGenerator: IdGenerator;
 };
 
 type IdGenerator = {
@@ -338,6 +337,31 @@ function normalizePhone(value: string): string {
   return value;
 }
 
+function createIdGenerator(startValue: string): IdGenerator {
+  const trimmedValue = startValue.trim();
+  const numericSuffix = trimmedValue.match(/^(.*?)(\d+)$/);
+  if (!numericSuffix) {
+    return {
+      prefix: trimmedValue,
+      suffix: "",
+      width: 3,
+      nextNumber: 1,
+    };
+  }
+
+  const nextNumber = Number(numericSuffix[2]);
+  if (!Number.isSafeInteger(nextNumber)) {
+    throw new Error("Enter a starting ID with a valid numeric suffix.");
+  }
+
+  return {
+    prefix: numericSuffix[1],
+    suffix: "",
+    width: numericSuffix[2].length,
+    nextNumber,
+  };
+}
+
 function inferIdGenerator(ids: string[]): IdGenerator | null {
   if (ids.length === 0) return null;
 
@@ -475,10 +499,10 @@ function createRecords(
           ).padStart(idGenerator.width, "0")}${idGenerator.suffix}`;
           idGenerator.nextNumber += 1;
         } else {
-          studentId = `${idState.fallbackPrefix}${String(
-            idState.fallbackNextNumber
-          ).padStart(3, "0")}`;
-          idState.fallbackNextNumber += 1;
+          studentId = `${idState.fallbackGenerator.prefix}${String(
+            idState.fallbackGenerator.nextNumber
+          ).padStart(idState.fallbackGenerator.width, "0")}${idState.fallbackGenerator.suffix}`;
+          idState.fallbackGenerator.nextNumber += 1;
         }
       } while (idState.usedIds.has(studentId.toLowerCase()));
       idState.usedIds.add(studentId.toLowerCase());
@@ -593,8 +617,7 @@ export default function StudentImportPage() {
 
       const idState: IdState = {
         usedIds: new Set<string>(),
-        fallbackPrefix: idPrefix.trim(),
-        fallbackNextNumber: 1,
+        fallbackGenerator: createIdGenerator(idPrefix),
       };
       const sheetIdGenerators = new Map<string, IdGenerator | null>();
       for (const detectedSheet of detectedSheets) {
@@ -658,7 +681,7 @@ export default function StudentImportPage() {
     let activeSection = "";
     let pendingPhoneIndex: number | null = null;
     const usedIds = new Set<string>();
-    let nextNumber = 1;
+    const idGenerator = createIdGenerator(idPrefix);
     const lines = smsText.split(/\r?\n/);
 
     const isGradeLine = (line: string) => {
@@ -729,8 +752,11 @@ export default function StudentImportPage() {
 
       let id = "";
       do {
-        id = `${idPrefix.trim()}${String(nextNumber).padStart(3, "0")}`;
-        nextNumber += 1;
+        id = `${idGenerator.prefix}${String(idGenerator.nextNumber).padStart(
+          idGenerator.width,
+          "0"
+        )}${idGenerator.suffix}`;
+        idGenerator.nextNumber += 1;
       } while (usedIds.has(id.toLowerCase()));
       usedIds.add(id.toLowerCase());
 
@@ -776,7 +802,18 @@ export default function StudentImportPage() {
       return;
     }
 
-    const records = parseSmsText();
+    let records: StudentRecord[];
+    try {
+      records = parseSmsText();
+    } catch (parseError) {
+      setTextError(
+        parseError instanceof Error
+          ? parseError.message
+          : "Could not generate student IDs from this starting ID."
+      );
+      return;
+    }
+
     if (records.length === 0) {
       setTextError(
         "No student names were detected. Enter each student name on its own line, with an optional grade heading and phone number."
@@ -947,7 +984,7 @@ export default function StudentImportPage() {
                 />
               </label>
               <label className="text-sm font-medium text-slate-700">
-                Generated ID prefix
+                Generated ID prefix or starting ID
                 <input
                   type="text"
                   value={idPrefix}
@@ -959,13 +996,13 @@ export default function StudentImportPage() {
                     setError("");
                     setTextError("");
                   }}
-                  placeholder="MS/"
+                  placeholder="MS/ or SA/620"
                   className="mt-2 block w-full rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-3 text-sm shadow-inner shadow-slate-100 focus:border-blue-400 focus:bg-white focus:outline-none"
                   aria-describedby="id-prefix-help"
                 />
                 <span id="id-prefix-help" className="mt-1 block text-xs font-normal text-slate-500">
-                  Used when a worksheet has no existing IDs. Example: MS/
-                  produces MS/001, MS/002, and so on.
+                  Enter a prefix (MS/) to generate MS/001, MS/002, and so on,
+                  or a starting ID (SA/620) to generate SA/620, SA/621, and so on.
                 </span>
               </label>
               <label className="text-sm font-medium text-slate-700">
@@ -1121,7 +1158,7 @@ export default function StudentImportPage() {
               <p className="mb-4 mt-1 text-sm text-slate-500">
                 Add a grade heading such as G=8 or Grade=6, followed by each
                 student&apos;s name and phone number on separate lines. The
-                generated IDs use the prefix above.
+                generated IDs use the prefix or starting ID above.
               </p>
               <textarea
                 value={smsText}
