@@ -90,6 +90,13 @@ export default function AppHeader() {
           Student Import
         </Link>
         <Link
+          href="/rent-import"
+          aria-current={pathname === "/rent-import" ? "page" : undefined}
+          className={navClass("/rent-import")}
+        >
+          Rent Format
+        </Link>
+        <Link
           href="/reading-checker"
           aria-current={pathname === "/reading-checker" ? "page" : undefined}
           className={navClass("/reading-checker")}

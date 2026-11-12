@@ -27,6 +27,14 @@ const dashboardLinks = [
     color: "bg-amber-50 text-amber-700 ring-amber-100",
   },
   {
+    href: "/rent-import",
+    label: "Rent Format",
+    description: "Convert rent workbooks into the UniRent import format.",
+    category: "Rent records",
+    mark: "RF",
+    color: "bg-violet-50 text-violet-700 ring-violet-100",
+  },
+  {
     href: "/reading-checker",
     label: "Reading Checker",
     description: "Validate reading spreadsheets and review lower current readings.",
