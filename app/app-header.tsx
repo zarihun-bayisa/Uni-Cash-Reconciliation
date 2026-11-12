@@ -89,6 +89,13 @@ export default function AppHeader() {
         >
           Student Import
         </Link>
+        <Link
+          href="/reading-checker"
+          aria-current={pathname === "/reading-checker" ? "page" : undefined}
+          className={navClass("/reading-checker")}
+        >
+          Reading Checker
+        </Link>
       </nav>
 
       <div className="flex items-center justify-between gap-3 border-t border-white/10 px-5 py-4 md:bg-black/10">

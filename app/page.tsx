@@ -26,6 +26,14 @@ const dashboardLinks = [
     mark: "SI",
     color: "bg-amber-50 text-amber-700 ring-amber-100",
   },
+  {
+    href: "/reading-checker",
+    label: "Reading Checker",
+    description: "Validate reading spreadsheets and review lower current readings.",
+    category: "Reading validation",
+    mark: "RC",
+    color: "bg-blue-50 text-blue-700 ring-blue-100",
+  },
 ];
 
 export default function DashboardPage() {
