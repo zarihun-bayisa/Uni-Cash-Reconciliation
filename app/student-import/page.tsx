@@ -536,6 +536,7 @@ export default function StudentImportPage() {
   const [smsText, setSmsText] = useState("");
   const [gradeFilter, setGradeFilter] = useState<GradeFilter>("all");
   const [specificGrades, setSpecificGrades] = useState<string[]>([]);
+  const [selectedSheets, setSelectedSheets] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [textError, setTextError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -543,7 +544,10 @@ export default function StudentImportPage() {
   function getFilteredStudents(records: StudentRecord[]): StudentRecord[] {
     return sortStudentsByGrade(
       records.filter((student) =>
-        gradeMatchesFilter(student.grade, gradeFilter, specificGrades)
+        gradeMatchesFilter(student.grade, gradeFilter, specificGrades) &&
+        (student.sourceSheet === "SMS text" ||
+          selectedSheets.length === 0 ||
+          selectedSheets.includes(student.sourceSheet))
       )
     );
   }
@@ -568,6 +572,7 @@ export default function StudentImportPage() {
     setError("");
     setStudents([]);
     setSources([]);
+    setSelectedSheets([]);
 
     try {
       const detectedSheets: DetectedSheet[] = [];
@@ -973,6 +978,7 @@ export default function StudentImportPage() {
                     setStudents([]);
                     setSources([]);
                     setTextStudents([]);
+                    setSelectedSheets([]);
                     if (selectedFiles.length > 20) {
                       setFiles([]);
                       setError("Select no more than 20 Excel files at a time.");
@@ -1121,10 +1127,65 @@ export default function StudentImportPage() {
                 </fieldset>
               )}
             </div>
+            {sources.length > 0 && (
+              <fieldset className="mt-5 border-t border-slate-100 pt-4">
+                <legend className="text-sm font-semibold text-slate-800">
+                  Worksheets for downloads
+                </legend>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedSheets([])}
+                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    All sheets
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedSheets(sources.map((source) => source.name))}
+                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    Select all
+                  </button>
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {sources.map((source) => (
+                    <label
+                      key={source.name}
+                      className="flex min-w-0 items-center gap-2 rounded-lg border border-slate-100 px-3 py-2 text-sm text-slate-700"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={
+                          selectedSheets.length === 0 ||
+                          selectedSheets.includes(source.name)
+                        }
+                        onChange={(event) =>
+                          setSelectedSheets((current) => {
+                            const selected =
+                              current.length === 0
+                                ? sources.map((item) => item.name)
+                                : current;
+                            return event.target.checked
+                              ? [...selected, source.name]
+                              : selected.filter((name) => name !== source.name);
+                          })
+                        }
+                        className="h-4 w-4 shrink-0 rounded border-slate-300 text-blue-700 focus:ring-blue-600"
+                      />
+                      <span className="truncate" title={source.name}>
+                        {source.name} ({source.recordCount})
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            )}
             <p className="mt-3 text-xs leading-5 text-slate-500">
-              Applies to both student and payment downloads, including SMS/text
-              records. Previews remain complete. Downloads are ordered Nursery,
-              UKG, KG-1–KG-3, then grades 1–12.
+              Grade filters apply to student and payment downloads, including
+              SMS/text records. Worksheet selection applies to workbook records.
+              Previews remain complete. Downloads are ordered Nursery, UKG,
+              KG-1–KG-3, then grades 1–12.
             </p>
             {(students.length > 0 || textStudents.length > 0) && (
               <p className="mt-1 text-xs font-medium text-slate-600">

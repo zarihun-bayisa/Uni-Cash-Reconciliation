@@ -694,7 +694,7 @@ export default function RentImportPage() {
       );
     }
   }
-
+  
   const missingCount = records.filter((record) => record.issues.length > 0).length;
   const tableHeaders =
     template?.headers ?? RENT_FIELDS.map((field) => FIELD_LABELS[field]);
